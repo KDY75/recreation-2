@@ -517,7 +517,7 @@ export default function Home() {
     if (game.started || applyingIdentityPreset) return;
     if (
       !window.confirm(
-        "현재 배정표를 추천 균형 배치로 바꿀까요? 시작 정보 카드도 S-3, K-3, P-3으로 맞춰집니다.",
+        "현재 배정표를 추천 균형 배치로 바꿀까요? 시작 정보 카드도 S-7, K-6, P-1로 맞춰집니다.",
       )
     ) {
       return;
@@ -536,9 +536,9 @@ export default function Home() {
         ...current,
         identities: structuredClone(identities),
         startSelections: {
-          S: "S-3",
-          K: "K-3",
-          P: "P-3",
+          S: "S-7",
+          K: "K-6",
+          P: "P-1",
         },
       }));
       setEditingIdentities(false);
