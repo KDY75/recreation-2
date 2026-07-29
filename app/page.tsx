@@ -42,7 +42,7 @@ type SaveStatus = "loading" | "saving" | "saved" | "error";
 type UnlockStatus = "locked" | "unlocking" | "unlocked";
 const GAME_STORAGE_KEY = "hidden-particle-game-device-v1";
 const LEGACY_ROOM_ONE_STORAGE_KEY = "hidden-particle-game-room-v1-1";
-const AUTH_SESSION_KEY = "hidden-particle-operator-session-v1";
+const AUTH_SESSION_KEY = "hidden-particle-operator-session-v2";
 
 type ObservationDraft = {
   type: "comparison" | "hypothesis";
