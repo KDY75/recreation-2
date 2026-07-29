@@ -1185,6 +1185,10 @@ select {
   font-size: 10px;
 }
 
+.observation-revise-actions {
+  margin-top: 12px;
+}
+
 .generated-card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1335,6 +1339,38 @@ select {
   line-height: 1.55;
 }
 
+.trade-pair-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.trade-pair-status > span {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.trade-pair-status strong {
+  color: var(--mint);
+  font-size: 10px;
+}
+
+.trade-pair-status > span.is-complete {
+  border-color: rgba(99, 244, 197, 0.28);
+  background: rgba(99, 244, 197, 0.07);
+  color: var(--text);
+}
+
 .trade-stage {
   position: relative;
   display: grid;
@@ -1441,7 +1477,7 @@ select {
 
 .trade-log-list > div {
   display: grid;
-  grid-template-columns: 38px 1fr 28px 1fr auto;
+  grid-template-columns: 38px 1fr 28px 1fr auto auto;
   align-items: center;
   gap: 10px;
   min-height: 51px;
@@ -1468,6 +1504,23 @@ select {
   color: var(--mint);
   font-size: 10px;
   font-style: normal;
+}
+
+.undo-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 115, 133, 0.32);
+  border-radius: 9px;
+  background: rgba(255, 115, 133, 0.07);
+  color: var(--red);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.undo-button:hover {
+  border-color: rgba(255, 115, 133, 0.58);
+  background: rgba(255, 115, 133, 0.13);
 }
 
 .paper-panel {
@@ -2279,6 +2332,10 @@ select {
     padding: 14px;
   }
 
+  .trade-pair-status {
+    grid-template-columns: 1fr;
+  }
+
   .trade-submit {
     width: 100%;
     min-width: 0;
@@ -2292,6 +2349,15 @@ select {
   .trade-log-list i,
   .trade-log-list em {
     display: none;
+  }
+
+  .trade-log-list > div > strong {
+    grid-column: 2;
+  }
+
+  .trade-log-list .undo-button {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .paper-entry {

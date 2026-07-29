@@ -46,6 +46,11 @@ type UnlockStatus = "locked" | "unlocking" | "unlocked";
 const GAME_STORAGE_KEY = "hidden-particle-game-device-v1";
 const LEGACY_ROOM_ONE_STORAGE_KEY = "hidden-particle-game-room-v1-1";
 const AUTH_SESSION_KEY = "hidden-particle-operator-session-v2";
+const TRADE_TEAM_PAIRS: Array<[TeamId, TeamId]> = [
+  ["S", "K"],
+  ["S", "P"],
+  ["K", "P"],
+];
 
 type ObservationDraft = {
   type: "comparison" | "hypothesis";
@@ -56,10 +61,23 @@ type ObservationDraft = {
   stateGuess: QuantumState;
 };
 
+type ObservationRevision = {
+  round: number;
+  team: TeamId;
+  drafts: ObservationDraft[];
+};
+
 type FinalGuess = {
   particle: Particle | "";
   state: QuantumState | "";
 };
+
+function isSameTeamPair(
+  first: readonly [TeamId, TeamId],
+  second: readonly [TeamId, TeamId],
+) {
+  return first.includes(second[0]) && first.includes(second[1]);
+}
 
 const NAV_ITEMS: Array<{
   id: SectionId;
@@ -307,6 +325,8 @@ export default function Home() {
   const [observationDrafts, setObservationDrafts] = useState(
     createObservationDrafts,
   );
+  const [observationRevision, setObservationRevision] =
+    useState<ObservationRevision | null>(null);
 
   const [tradeTeams, setTradeTeams] = useState<[TeamId, TeamId]>(["S", "K"]);
   const [tradeCardIds, setTradeCardIds] = useState<
@@ -333,7 +353,9 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated || unlockStatus !== "unlocked") return;
-    setSaveStatus("saving");
+    const savingTimeout = window.setTimeout(() => {
+      setSaveStatus("saving");
+    }, 0);
     const timeout = window.setTimeout(() => {
       try {
         window.localStorage.setItem(GAME_STORAGE_KEY, JSON.stringify(game));
@@ -343,7 +365,10 @@ export default function Home() {
       }
     }, 250);
 
-    return () => window.clearTimeout(timeout);
+    return () => {
+      window.clearTimeout(savingTimeout);
+      window.clearTimeout(timeout);
+    };
   }, [game, hydrated, unlockStatus]);
 
   const currentCollision = useMemo(
@@ -358,6 +383,17 @@ export default function Home() {
     (run) =>
       run.round === game.round && run.team === activeObservationTeam,
   );
+
+  const currentRoundTrades = game.trades.filter(
+    (trade) => trade.round === game.round,
+  );
+  const selectedTradePairCompleted = currentRoundTrades.some((trade) =>
+    isSameTeamPair(trade.teams, tradeTeams),
+  );
+  const isRevisingCurrentObservation =
+    observationRevision?.round === game.round &&
+    observationRevision.team === activeObservationTeam &&
+    Boolean(currentObservationRun);
 
   const currentPaperBatch = game.paperBatches.find(
     (batch) =>
@@ -415,6 +451,7 @@ export default function Home() {
       );
       setCollisionSelection({ S: [], K: [], P: [] });
       setObservationDrafts(createObservationDrafts());
+      setObservationRevision(null);
       setPaperDrafts(createPaperDrafts());
       setFinalGuesses(EMPTY_FINAL_GUESSES());
       setSection("setup");
@@ -504,6 +541,7 @@ export default function Home() {
     setGame((current) => createInitialState(structuredClone(current.identities)));
     setCollisionSelection({ S: [], K: [], P: [] });
     setObservationDrafts(createObservationDrafts());
+    setObservationRevision(null);
     setPaperDrafts(createPaperDrafts());
     setFinalGuesses(EMPTY_FINAL_GUESSES());
     setSection("setup");
@@ -529,6 +567,7 @@ export default function Home() {
     setCollisionEvent(1);
     setCollisionSelection({ S: [], K: [], P: [] });
     setObservationDrafts(createObservationDrafts());
+    setObservationRevision(null);
     setPaperDrafts(createPaperDrafts());
     setSection("collision");
   }
@@ -610,12 +649,66 @@ export default function Home() {
     }));
   }
 
+  function beginObservationRevision(team: TeamId) {
+    const run = game.observations.find(
+      (item) => item.round === game.round && item.team === team,
+    );
+    if (!run) return;
+
+    const hasTradedCard = run.cardIds.some(
+      (cardId) => game.cards.find((card) => card.id === cardId)?.usedInTrade,
+    );
+    if (hasTradedCard) {
+      window.alert(
+        "이 관측 카드가 교섭에 사용됐습니다. 먼저 해당 교섭을 무른 뒤 다시 시도해 주세요.",
+      );
+      return;
+    }
+
+    const drafts = Array.isArray(observationDrafts?.[team])
+      ? observationDrafts[team]
+      : createObservationDraftsForTeam(team);
+    setObservationRevision({
+      round: game.round,
+      team,
+      drafts: drafts.map((draft) => ({ ...draft })),
+    });
+  }
+
+  function cancelObservationRevision() {
+    if (!observationRevision) return;
+    const revision = observationRevision;
+    setObservationDrafts((current) => ({
+      ...current,
+      [revision.team]: revision.drafts.map((draft) => ({ ...draft })),
+    }));
+    setObservationRevision(null);
+  }
+
+  function selectObservationTeam(team: TeamId) {
+    if (observationRevision) {
+      cancelObservationRevision();
+    }
+    setActiveObservationTeam(team);
+  }
+
   function processObservations(team: TeamId) {
+    const existingRun = game.observations.find(
+      (run) => run.round === game.round && run.team === team,
+    );
+    const isRevision =
+      existingRun &&
+      observationRevision?.round === game.round &&
+      observationRevision.team === team;
+    if (existingRun && !isRevision) return;
     if (
-      game.observations.some(
-        (run) => run.round === game.round && run.team === team,
+      existingRun?.cardIds.some(
+        (cardId) => game.cards.find((card) => card.id === cardId)?.usedInTrade,
       )
     ) {
+      window.alert(
+        "이 관측 카드가 교섭에 사용됐습니다. 먼저 해당 교섭을 무른 뒤 다시 판정해 주세요.",
+      );
       return;
     }
 
@@ -623,8 +716,19 @@ export default function Home() {
     const teamDrafts = Array.isArray(observationDrafts?.[team])
       ? observationDrafts[team]
       : createObservationDraftsForTeam(team);
+    const cardIds =
+      existingRun?.cardIds ??
+      teamDrafts.map((_, index) => game.nextCardId + index);
+    if (cardIds.length !== teamDrafts.length) {
+      window.alert("관측 카드 기록이 올바르지 않습니다. 게임을 새로 열어 주세요.");
+      return;
+    }
+
     const cards: DataCard[] = teamDrafts.map((draft, index) => {
       const own = game.identities[draft.ownParticipant];
+      const existingCard = game.cards.find(
+        (card) => card.id === cardIds[index],
+      );
       let title = "개인관측 · 비교관측";
       let body = "";
 
@@ -653,26 +757,39 @@ export default function Home() {
       }
 
       return {
-        id: game.nextCardId + index,
+        id: cardIds[index],
         team,
         kind: "observation",
         round: game.round,
         title,
         body,
-        usedInTrade: false,
-        createdAt,
+        usedInTrade: existingCard?.usedInTrade ?? false,
+        createdAt: existingCard?.createdAt ?? createdAt,
       };
     });
 
-    setGame((current) => ({
-      ...current,
-      cards: [...current.cards, ...cards],
-      nextCardId: current.nextCardId + cards.length,
-      observations: [
-        ...current.observations,
-        { round: current.round, team, cardIds: cards.map((card) => card.id) },
-      ],
-    }));
+    setGame((current) => {
+      if (existingRun) {
+        const revisedCards = new Map(cards.map((card) => [card.id, card]));
+        return {
+          ...current,
+          cards: current.cards.map(
+            (card) => revisedCards.get(card.id) ?? card,
+          ),
+        };
+      }
+
+      return {
+        ...current,
+        cards: [...current.cards, ...cards],
+        nextCardId: current.nextCardId + cards.length,
+        observations: [
+          ...current.observations,
+          { round: current.round, team, cardIds: cards.map((card) => card.id) },
+        ],
+      };
+    });
+    setObservationRevision(null);
   }
 
   function awardCorrectionCard(team: TeamId) {
@@ -717,6 +834,16 @@ export default function Home() {
       window.alert("이번 라운드 교섭 기록은 최대 3회까지 저장할 수 있습니다.");
       return;
     }
+    if (
+      game.trades.some(
+        (trade) =>
+          trade.round === game.round &&
+          isSameTeamPair(trade.teams, [firstTeam, secondTeam]),
+      )
+    ) {
+      window.alert("이 두 팀은 이번 라운드에 이미 교섭을 완료했습니다.");
+      return;
+    }
     const firstCard = game.cards.find((card) => card.id === firstCardId);
     const secondCard = game.cards.find((card) => card.id === secondCardId);
     if (
@@ -746,7 +873,7 @@ export default function Home() {
       trades: [
         ...current.trades,
         {
-          id: `trade-${current.round}-${current.trades.length + 1}`,
+          id: `trade-${current.round}-${Date.now()}`,
           round: current.round,
           teams: [firstTeam, secondTeam],
           cardIds: [firstCardId, secondCardId],
@@ -754,6 +881,47 @@ export default function Home() {
         },
       ],
     }));
+    setTradeCardIds([null, null]);
+  }
+
+  function undoTrade(tradeId: string) {
+    const trade = game.trades.find((item) => item.id === tradeId);
+    if (!trade) return;
+    if (
+      !window.confirm(
+        `${TEAM_SHORT_NAMES[trade.teams[0]]} ↔ ${TEAM_SHORT_NAMES[trade.teams[1]]} 교섭을 무를까요?\n\n양 팀 점수가 1점씩 차감되고 카드 #${String(trade.cardIds[0]).padStart(3, "0")}, #${String(trade.cardIds[1]).padStart(3, "0")}은 다시 교환할 수 있습니다.`,
+      )
+    ) {
+      return;
+    }
+
+    setGame((current) => {
+      const target = current.trades.find((item) => item.id === tradeId);
+      if (!target) return current;
+
+      const remainingTrades = current.trades.filter(
+        (item) => item.id !== tradeId,
+      );
+      return {
+        ...current,
+        cards: current.cards.map((card) =>
+          target.cardIds.includes(card.id)
+            ? {
+                ...card,
+                usedInTrade: remainingTrades.some((item) =>
+                  item.cardIds.includes(card.id),
+                ),
+              }
+            : card,
+        ),
+        scores: {
+          ...current.scores,
+          [target.teams[0]]: current.scores[target.teams[0]] - 1,
+          [target.teams[1]]: current.scores[target.teams[1]] - 1,
+        },
+        trades: remainingTrades,
+      };
+    });
     setTradeCardIds([null, null]);
   }
 
@@ -1384,7 +1552,7 @@ export default function Home() {
                   {TEAM_IDS.map((team) => (
                     <button
                       className={`team-${team.toLowerCase()} ${activeObservationTeam === team ? "is-active" : ""}`}
-                      onClick={() => setActiveObservationTeam(team)}
+                      onClick={() => selectObservationTeam(team)}
                       key={team}
                     >
                       {TEAM_SHORT_NAMES[team]}
@@ -1413,8 +1581,19 @@ export default function Home() {
                     </div>
                   </div>
                   <span className="count-badge">
-                    CARD #{String(game.nextCardId).padStart(3, "0")}–
-                    {String(game.nextCardId + 3).padStart(3, "0")}
+                    CARD #
+                    {String(
+                      currentObservationRun?.cardIds[0] ?? game.nextCardId,
+                    ).padStart(3, "0")}
+                    –
+                    {String(
+                      currentObservationRun?.cardIds[
+                        currentObservationRun.cardIds.length - 1
+                      ] ??
+                        game.nextCardId +
+                          activeObservationDraftList.length -
+                          1,
+                    ).padStart(3, "0")}
                   </span>
                 </div>
 
@@ -1433,7 +1612,10 @@ export default function Home() {
                             className={
                               draft.type === "comparison" ? "is-active" : ""
                             }
-                            disabled={Boolean(currentObservationRun)}
+                            disabled={
+                              Boolean(currentObservationRun) &&
+                              !isRevisingCurrentObservation
+                            }
                             onClick={() =>
                               updateObservationDraft(
                                 activeObservationTeam,
@@ -1448,7 +1630,10 @@ export default function Home() {
                             className={
                               draft.type === "hypothesis" ? "is-active" : ""
                             }
-                            disabled={Boolean(currentObservationRun)}
+                            disabled={
+                              Boolean(currentObservationRun) &&
+                              !isRevisingCurrentObservation
+                            }
                             onClick={() =>
                               updateObservationDraft(
                                 activeObservationTeam,
@@ -1464,7 +1649,10 @@ export default function Home() {
                           <span>자기 팀</span>
                           <select
                             value={draft.ownParticipant}
-                            disabled={Boolean(currentObservationRun)}
+                            disabled={
+                              Boolean(currentObservationRun) &&
+                              !isRevisingCurrentObservation
+                            }
                             onChange={(event) =>
                               updateObservationDraft(
                                 activeObservationTeam,
@@ -1492,7 +1680,10 @@ export default function Home() {
                               <span>상대 팀</span>
                               <select
                                 value={draft.otherParticipant}
-                                disabled={Boolean(currentObservationRun)}
+                                disabled={
+                                  Boolean(currentObservationRun) &&
+                                  !isRevisingCurrentObservation
+                                }
                                 onChange={(event) =>
                                   updateObservationDraft(
                                     activeObservationTeam,
@@ -1530,7 +1721,10 @@ export default function Home() {
                               <span>가설 종류</span>
                               <select
                                 value={draft.axis}
-                                disabled={Boolean(currentObservationRun)}
+                                disabled={
+                                  Boolean(currentObservationRun) &&
+                                  !isRevisingCurrentObservation
+                                }
                                 onChange={(event) =>
                                   updateObservationDraft(
                                     activeObservationTeam,
@@ -1552,7 +1746,10 @@ export default function Home() {
                               {draft.axis === "particle" ? (
                                 <select
                                   value={draft.particleGuess}
-                                  disabled={Boolean(currentObservationRun)}
+                                  disabled={
+                                    Boolean(currentObservationRun) &&
+                                    !isRevisingCurrentObservation
+                                  }
                                   onChange={(event) =>
                                     updateObservationDraft(
                                       activeObservationTeam,
@@ -1573,7 +1770,10 @@ export default function Home() {
                               ) : (
                                 <select
                                   value={draft.stateGuess}
-                                  disabled={Boolean(currentObservationRun)}
+                                  disabled={
+                                    Boolean(currentObservationRun) &&
+                                    !isRevisingCurrentObservation
+                                  }
                                   onChange={(event) =>
                                     updateObservationDraft(
                                       activeObservationTeam,
@@ -1600,34 +1800,64 @@ export default function Home() {
                   )}
                 </div>
 
-                {!currentObservationRun ? (
+                {!currentObservationRun || isRevisingCurrentObservation ? (
                   <div className="panel-actions">
-                    <span>판정 시 공식 데이터 카드 4장이 생성됩니다.</span>
+                    <span>
+                      {isRevisingCurrentObservation
+                        ? "기존 카드 번호를 유지한 채 관측 결과만 다시 판정합니다."
+                        : "판정 시 공식 데이터 카드 4장이 생성됩니다."}
+                    </span>
+                    {isRevisingCurrentObservation && (
+                      <button
+                        className="secondary-button"
+                        onClick={cancelObservationRevision}
+                      >
+                        수정 취소
+                      </button>
+                    )}
                     <button
                       className="primary-button"
                       onClick={() => processObservations(activeObservationTeam)}
                     >
-                      4개 관측 일괄 판정
+                      {isRevisingCurrentObservation
+                        ? "4개 관측 다시 판정"
+                        : "4개 관측 일괄 판정"}
                     </button>
                   </div>
                 ) : (
-                  <div className="generated-card-grid">
-                    {(currentObservationRun.cardIds ?? []).map((cardId) => {
-                      const card = game.cards.find((item) => item.id === cardId);
-                      if (!card) return null;
-                      return (
-                        <div className="data-card compact-card" key={card.id}>
-                          <div>
-                            <span className="card-number">
-                              #{String(card.id).padStart(3, "0")}
-                            </span>
-                            <CardTag card={card} />
+                  <>
+                    <div className="generated-card-grid">
+                      {(currentObservationRun.cardIds ?? []).map((cardId) => {
+                        const card = game.cards.find((item) => item.id === cardId);
+                        if (!card) return null;
+                        return (
+                          <div className="data-card compact-card" key={card.id}>
+                            <div>
+                              <span className="card-number">
+                                #{String(card.id).padStart(3, "0")}
+                              </span>
+                              <CardTag card={card} />
+                            </div>
+                            <strong>{card.body}</strong>
                           </div>
-                          <strong>{card.body}</strong>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                    <div className="panel-actions observation-revise-actions">
+                      <span>
+                        잘못 판정했다면 카드 번호를 유지한 채 다시 입력할 수
+                        있습니다.
+                      </span>
+                      <button
+                        className="secondary-button"
+                        onClick={() =>
+                          beginObservationRevision(activeObservationTeam)
+                        }
+                      >
+                        관측 무르기 · 다시 입력
+                      </button>
+                    </div>
+                  </>
                 )}
               </article>
             </>
@@ -1720,14 +1950,33 @@ export default function Home() {
                   <p className="eyebrow">ROUND {game.round} · NEGOTIATION</p>
                   <h2>교섭 카드 교환</h2>
                   <p>
-                    두 팀과 미사용 카드 1장씩을 선택하세요. 완료 시 양 팀 +1점,
-                    사용 카드는 자동 잠금됩니다.
+                    라운드마다 팀 조합별로 1회만 가능합니다. 미사용 카드
+                    1장씩을 교환하면 양 팀 +1점, 사용 카드는 자동 잠금됩니다.
                   </p>
                 </div>
                 <span className="count-badge">
-                  {game.trades.filter((trade) => trade.round === game.round).length}
-                  /3 기록
+                  {currentRoundTrades.length}/3 기록
                 </span>
+              </div>
+
+              <div
+                className="trade-pair-status"
+                aria-label="이번 라운드 팀 조합별 교섭 상태"
+              >
+                {TRADE_TEAM_PAIRS.map((pair) => {
+                  const completed = currentRoundTrades.some((trade) =>
+                    isSameTeamPair(trade.teams, pair),
+                  );
+                  return (
+                    <span
+                      className={completed ? "is-complete" : ""}
+                      key={pair.join("-")}
+                    >
+                      {TEAM_SHORT_NAMES[pair[0]]} ↔ {TEAM_SHORT_NAMES[pair[1]]}
+                      <strong>{completed ? "완료" : "가능"}</strong>
+                    </span>
+                  );
+                })}
               </div>
 
               <article className="trade-stage">
@@ -1768,6 +2017,7 @@ export default function Home() {
                         <span>교환할 미사용 카드</span>
                         <select
                           value={tradeCardIds[side] ?? ""}
+                          disabled={selectedTradePairCompleted}
                           onChange={(event) => {
                             const next: [number | null, number | null] = [
                               ...tradeCardIds,
@@ -1805,11 +2055,12 @@ export default function Home() {
                 className="primary-button trade-submit"
                 onClick={completeTrade}
                 disabled={
-                  game.trades.filter((trade) => trade.round === game.round)
-                    .length >= 3
+                  currentRoundTrades.length >= 3 || selectedTradePairCompleted
                 }
               >
-                인용교환 완료 · 양 팀 +1점
+                {selectedTradePairCompleted
+                  ? "이 팀 조합은 교섭 완료"
+                  : "인용교환 완료 · 양 팀 +1점"}
               </button>
 
               <article className="panel history-panel">
@@ -1819,26 +2070,29 @@ export default function Home() {
                     <h3>이번 라운드 교섭 기록</h3>
                   </div>
                 </div>
-                {game.trades.filter((trade) => trade.round === game.round)
-                  .length ? (
+                {currentRoundTrades.length ? (
                   <div className="trade-log-list">
-                    {game.trades
-                      .filter((trade) => trade.round === game.round)
-                      .map((trade, index) => (
-                        <div key={trade.id}>
-                          <span>{String(index + 1).padStart(2, "0")}</span>
-                          <strong>
-                            {TEAM_SHORT_NAMES[trade.teams[0]]} #
-                            {String(trade.cardIds[0]).padStart(3, "0")}
-                          </strong>
-                          <i aria-hidden="true">⇄</i>
-                          <strong>
-                            {TEAM_SHORT_NAMES[trade.teams[1]]} #
-                            {String(trade.cardIds[1]).padStart(3, "0")}
-                          </strong>
-                          <em>각 +1점</em>
-                        </div>
-                      ))}
+                    {currentRoundTrades.map((trade, index) => (
+                      <div key={trade.id}>
+                        <span>{String(index + 1).padStart(2, "0")}</span>
+                        <strong>
+                          {TEAM_SHORT_NAMES[trade.teams[0]]} #
+                          {String(trade.cardIds[0]).padStart(3, "0")}
+                        </strong>
+                        <i aria-hidden="true">⇄</i>
+                        <strong>
+                          {TEAM_SHORT_NAMES[trade.teams[1]]} #
+                          {String(trade.cardIds[1]).padStart(3, "0")}
+                        </strong>
+                        <em>각 +1점</em>
+                        <button
+                          className="undo-button"
+                          onClick={() => undoTrade(trade.id)}
+                        >
+                          무르기
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <EmptyState>아직 기록된 교섭이 없습니다.</EmptyState>
