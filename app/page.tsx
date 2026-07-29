@@ -23,6 +23,7 @@ import {
 import {
   calculateCollision,
   collisionResultText,
+  rebuildPaperScoring,
   scorePaperBatch,
   type PaperGuess,
 } from "./game-logic";
@@ -399,6 +400,9 @@ export default function Home() {
     (batch) =>
       batch.round === game.round && batch.team === activePaperTeam,
   );
+  const currentFinalResult = game.finalSubmissions.find(
+    (submission) => submission.team === activeFinalTeam,
+  );
 
   const safeObservationTeam = TEAM_IDS.includes(activeObservationTeam)
     ? activeObservationTeam
@@ -410,10 +414,15 @@ export default function Home() {
     ? storedObservationDrafts
     : createObservationDraftsForTeam(safeObservationTeam);
 
-  const activePaperDraftList =
-    paperDrafts[activePaperTeam] ??
-    createPaperDrafts()[activePaperTeam] ??
-    createPaperDrafts().S;
+  const activePaperDraftList: PaperGuess[] = currentPaperBatch
+    ? currentPaperBatch.entries.map((entry) => ({
+        participant: entry.participant,
+        particle: entry.guessedParticle,
+        state: entry.guessedState,
+      }))
+    : (paperDrafts[activePaperTeam] ??
+      createPaperDrafts()[activePaperTeam] ??
+      createPaperDrafts().S);
 
   const filteredCards = game.cards
     .filter(
@@ -555,12 +564,11 @@ export default function Home() {
     const submittedTeams = game.paperBatches.filter(
       (batch) => batch.round === game.round,
     ).length;
-    if (
-      submittedTeams < 3 &&
-      !window.confirm(
-        `이번 라운드 논문 투고가 ${submittedTeams}/3팀만 완료되었습니다. 그래도 다음 라운드로 넘어갈까요?`,
-      )
-    ) {
+    const message =
+      submittedTeams < 3
+        ? `이번 라운드 논문 투고가 ${submittedTeams}/3팀만 완료되었습니다. 그래도 다음 라운드로 넘어갈까요?`
+        : `${game.round}라운드 기록을 모두 확인하셨나요?\n\n다음 라운드로 넘어가기 전에 교섭·관측·논문 기록을 마지막으로 확인해 주세요.`;
+    if (!window.confirm(message)) {
       return;
     }
     setGame((current) => ({ ...current, round: current.round + 1 }));
@@ -948,17 +956,73 @@ export default function Home() {
       return;
     }
     const guesses = paperDrafts[team] ?? createPaperDrafts()[team];
-    const result = scorePaperBatch(game, team, guesses);
-    setGame((current) => ({
-      ...current,
-      scores: {
-        ...current.scores,
-        [team]: current.scores[team] + result.batch.total,
-      },
-      firstPublishedRound: result.firstPublishedRound,
-      teamCorrectTargets: result.teamCorrectTargets,
-      paperBatches: [...current.paperBatches, result.batch],
+    const summary = guesses
+      .map(
+        (guess, index) =>
+          `${index + 1}. ${guess.participant} = ${guess.particle} ${guess.state}`,
+      )
+      .join("\n");
+    if (
+      !window.confirm(
+        `${TEAM_SHORT_NAMES[team]} 논문 4편을 채점할까요?\n\n${summary}\n\n채점 직후에는 ‘논문 채점 무르기’로 다시 입력할 수 있습니다.`,
+      )
+    ) {
+      return;
+    }
+    setGame((current) => {
+      if (
+        current.paperBatches.some(
+          (batch) => batch.round === current.round && batch.team === team,
+        )
+      ) {
+        return current;
+      }
+      const result = scorePaperBatch(current, team, guesses);
+      return {
+        ...current,
+        scores: {
+          ...current.scores,
+          [team]: current.scores[team] + result.batch.total,
+        },
+        firstPublishedRound: result.firstPublishedRound,
+        teamCorrectTargets: result.teamCorrectTargets,
+        paperBatches: [...current.paperBatches, result.batch],
+      };
+    });
+  }
+
+  function undoPaperBatch(team: TeamId) {
+    const batch = game.paperBatches.find(
+      (item) => item.round === game.round && item.team === team,
+    );
+    if (!batch) return;
+    if (
+      !window.confirm(
+        `${TEAM_SHORT_NAMES[team]} 논문 채점을 무를까요?\n\n이 팀의 논문 점수와 최초 발표 기록을 취소하고, 남은 모든 논문 점수를 규칙대로 다시 계산합니다.`,
+      )
+    ) {
+      return;
+    }
+
+    const restoredGuesses: PaperGuess[] = batch.entries.map((entry) => ({
+      participant: entry.participant,
+      particle: entry.guessedParticle,
+      state: entry.guessedState,
     }));
+    setPaperDrafts((current) => ({
+      ...current,
+      [team]: restoredGuesses,
+    }));
+    setGame((current) => {
+      const target = current.paperBatches.find(
+        (item) => item.round === current.round && item.team === team,
+      );
+      if (!target) return current;
+      return rebuildPaperScoring(
+        current,
+        current.paperBatches.filter((item) => item.id !== target.id),
+      );
+    });
   }
 
   function updateFinalGuess(
@@ -988,29 +1052,91 @@ export default function Home() {
       window.alert("24명 전원의 입자와 상태를 모두 입력해 주세요.");
       return;
     }
-    const correctIds = PARTICIPANT_IDS.filter((participant) => {
-      const guess = guesses[participant];
-      const answer = game.identities[participant];
-      return guess.particle === answer.particle && guess.state === answer.state;
-    });
-    const awardedPoints = Math.min(correctIds.length, 18);
-    setGame((current) => ({
-      ...current,
-      scores: {
-        ...current.scores,
-        [team]: current.scores[team] + awardedPoints,
-      },
-      finalSubmissions: [
-        ...current.finalSubmissions,
+    if (
+      !window.confirm(
+        `${TEAM_SHORT_NAMES[team]} 최종 지도 24명을 채점할까요?\n\n제출 즉시 점수에 반영되며, 잘못 입력했다면 ‘최종 지도 채점 무르기’로 다시 입력할 수 있습니다.`,
+      )
+    ) {
+      return;
+    }
+
+    const completedGuesses = Object.fromEntries(
+      PARTICIPANT_IDS.map((participant) => [
+        participant,
         {
-          team,
-          correctIds,
-          rawCorrect: correctIds.length,
-          awardedPoints,
-          createdAt: new Date().toISOString(),
+          particle: guesses[participant].particle as Particle,
+          state: guesses[participant].state as QuantumState,
         },
-      ],
-    }));
+      ]),
+    ) as IdentityMap;
+    setGame((current) => {
+      if (
+        current.finalSubmissions.some(
+          (submission) => submission.team === team,
+        )
+      ) {
+        return current;
+      }
+      const correctIds = PARTICIPANT_IDS.filter((participant) => {
+        const guess = completedGuesses[participant];
+        const answer = current.identities[participant];
+        return guess.particle === answer.particle && guess.state === answer.state;
+      });
+      const awardedPoints = Math.min(correctIds.length, 18);
+      return {
+        ...current,
+        scores: {
+          ...current.scores,
+          [team]: current.scores[team] + awardedPoints,
+        },
+        finalSubmissions: [
+          ...current.finalSubmissions,
+          {
+            team,
+            correctIds,
+            rawCorrect: correctIds.length,
+            awardedPoints,
+            guesses: completedGuesses,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
+    });
+  }
+
+  function undoFinalSubmission(team: TeamId) {
+    const submission = game.finalSubmissions.find((item) => item.team === team);
+    if (!submission) return;
+    if (
+      !window.confirm(
+        `${TEAM_SHORT_NAMES[team]} 최종 지도 채점을 무를까요?\n\n반영된 ${submission.awardedPoints}점이 취소되고 입력 화면이 다시 열립니다.`,
+      )
+    ) {
+      return;
+    }
+
+    if (submission.guesses) {
+      setFinalGuesses((current) => ({
+        ...current,
+        [team]: structuredClone(submission.guesses),
+      }));
+    }
+    setGame((current) => {
+      const target = current.finalSubmissions.find(
+        (item) => item.team === team,
+      );
+      if (!target) return current;
+      return {
+        ...current,
+        scores: {
+          ...current.scores,
+          [team]: current.scores[team] - target.awardedPoints,
+        },
+        finalSubmissions: current.finalSubmissions.filter(
+          (item) => item.team !== team,
+        ),
+      };
+    });
   }
 
   if (unlockStatus !== "unlocked") {
@@ -2241,7 +2367,7 @@ export default function Home() {
                 {!currentPaperBatch ? (
                   <div className="panel-actions">
                     <span>
-                      채점 후에는 수정할 수 없습니다. 네 편을 확인해 주세요.
+                      확인창에서 네 편의 내용을 마지막으로 확인해 주세요.
                     </span>
                     <button
                       className="primary-button"
@@ -2251,26 +2377,40 @@ export default function Home() {
                     </button>
                   </div>
                 ) : (
-                  <div className="paper-total">
-                    <div>
-                      <span>채점 공지</span>
-                      <strong>
-                        {currentPaperBatch.entries
-                          .map(
-                            (entry) =>
-                              `${entry.points > 0 ? "+" : ""}${entry.points}점`,
-                          )
-                          .join(" · ")}
-                      </strong>
+                  <>
+                    <div className="paper-total">
+                      <div>
+                        <span>채점 공지</span>
+                        <strong>
+                          {currentPaperBatch.entries
+                            .map(
+                              (entry) =>
+                                `${entry.points > 0 ? "+" : ""}${entry.points}점`,
+                            )
+                            .join(" · ")}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>총 반영</span>
+                        <strong>
+                          {currentPaperBatch.total > 0 ? "+" : ""}
+                          {currentPaperBatch.total}
+                        </strong>
+                      </div>
                     </div>
-                    <div>
-                      <span>총 반영</span>
-                      <strong>
-                        {currentPaperBatch.total > 0 ? "+" : ""}
-                        {currentPaperBatch.total}
-                      </strong>
+                    <div className="panel-actions paper-revise-actions">
+                      <span>
+                        잘못 입력했다면 최초 발표 기록과 점수를 안전하게 다시
+                        계산합니다.
+                      </span>
+                      <button
+                        className="undo-button"
+                        onClick={() => undoPaperBatch(activePaperTeam)}
+                      >
+                        논문 채점 무르기
+                      </button>
                     </div>
-                  </div>
+                  </>
                 )}
               </article>
             </>
@@ -2333,23 +2473,20 @@ export default function Home() {
                       <div className="final-grid">
                         {participantsForTeam(targetTeam).map((participant) => {
                           const guess =
+                            currentFinalResult?.guesses?.[participant] ??
                             finalGuesses[activeFinalTeam][participant];
-                          const finalResult = game.finalSubmissions.find(
-                            (submission) =>
-                              submission.team === activeFinalTeam,
-                          );
                           const isCorrect =
-                            finalResult?.correctIds.includes(participant);
+                            currentFinalResult?.correctIds.includes(participant);
                           return (
                             <div
-                              className={`final-cell ${finalResult ? (isCorrect ? "is-correct" : "is-wrong") : ""}`}
+                              className={`final-cell ${currentFinalResult ? (isCorrect ? "is-correct" : "is-wrong") : ""}`}
                               key={participant}
                             >
                               <strong>{participant}</strong>
                               <select
                                 aria-label={`${participant} 입자`}
                                 value={guess.particle}
-                                disabled={Boolean(finalResult)}
+                                disabled={Boolean(currentFinalResult)}
                                 onChange={(event) =>
                                   updateFinalGuess(
                                     activeFinalTeam,
@@ -2371,7 +2508,7 @@ export default function Home() {
                               <select
                                 aria-label={`${participant} 상태`}
                                 value={guess.state}
-                                disabled={Boolean(finalResult)}
+                                disabled={Boolean(currentFinalResult)}
                                 onChange={(event) =>
                                   updateFinalGuess(
                                     activeFinalTeam,
@@ -2390,7 +2527,7 @@ export default function Home() {
                                   </option>
                                 ))}
                               </select>
-                              {finalResult && (
+                              {currentFinalResult && (
                                 <span className="final-verdict">
                                   {isCorrect ? "✓" : "×"}
                                 </span>
@@ -2402,35 +2539,31 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                {game.finalSubmissions.find(
-                  (submission) => submission.team === activeFinalTeam,
-                ) ? (
-                  <div className="final-score-result">
-                    <div>
-                      <span>완전 일치</span>
-                      <strong>
-                        {
-                          game.finalSubmissions.find(
-                            (submission) =>
-                              submission.team === activeFinalTeam,
-                          )?.rawCorrect
-                        }
-                        /24
-                      </strong>
+                {currentFinalResult ? (
+                  <>
+                    <div className="final-score-result">
+                      <div>
+                        <span>완전 일치</span>
+                        <strong>{currentFinalResult.rawCorrect}/24</strong>
+                      </div>
+                      <div>
+                        <span>점수 반영</span>
+                        <strong>+{currentFinalResult.awardedPoints}</strong>
+                      </div>
                     </div>
-                    <div>
-                      <span>점수 반영</span>
-                      <strong>
-                        +
-                        {
-                          game.finalSubmissions.find(
-                            (submission) =>
-                              submission.team === activeFinalTeam,
-                          )?.awardedPoints
-                        }
-                      </strong>
+                    <div className="panel-actions final-revise-actions">
+                      <span>
+                        잘못 입력했다면 반영 점수를 취소하고 입력 화면을 다시
+                        엽니다.
+                      </span>
+                      <button
+                        className="undo-button"
+                        onClick={() => undoFinalSubmission(activeFinalTeam)}
+                      >
+                        최종 지도 채점 무르기
+                      </button>
                     </div>
-                  </div>
+                  </>
                 ) : (
                   <div className="panel-actions">
                     <span>24칸을 모두 입력하면 한 번에 채점됩니다.</span>

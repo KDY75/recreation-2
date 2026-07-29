@@ -73,6 +73,7 @@ export type FinalSubmission = {
   correctIds: ParticipantId[];
   rawCorrect: number;
   awardedPoints: number;
+  guesses?: IdentityMap;
   createdAt: string;
 };
 

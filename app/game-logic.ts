@@ -140,3 +140,64 @@ export function scorePaperBatch(
     teamCorrectTargets,
   };
 }
+
+export function rebuildPaperScoring(
+  state: GameState,
+  batchesToKeep: GameState["paperBatches"],
+): GameState {
+  let scores = { ...state.scores };
+  state.paperBatches.forEach((batch) => {
+    scores[batch.team] -= batch.total;
+  });
+
+  let firstPublishedRound: GameState["firstPublishedRound"] = {};
+  let teamCorrectTargets: GameState["teamCorrectTargets"] = {
+    S: [],
+    K: [],
+    P: [],
+  };
+  const paperBatches: GameState["paperBatches"] = [];
+  const orderedBatches = [...batchesToKeep].sort(
+    (first, second) => first.round - second.round,
+  );
+
+  orderedBatches.forEach((storedBatch) => {
+    const guesses: PaperGuess[] = storedBatch.entries.map((entry) => ({
+      participant: entry.participant,
+      particle: entry.guessedParticle,
+      state: entry.guessedState,
+    }));
+    const result = scorePaperBatch(
+      {
+        ...state,
+        round: storedBatch.round,
+        scores,
+        firstPublishedRound,
+        teamCorrectTargets,
+        paperBatches,
+      },
+      storedBatch.team,
+      guesses,
+    );
+    const recalculatedBatch = {
+      ...result.batch,
+      id: storedBatch.id,
+      createdAt: storedBatch.createdAt,
+    };
+    scores = {
+      ...scores,
+      [storedBatch.team]: scores[storedBatch.team] + recalculatedBatch.total,
+    };
+    firstPublishedRound = result.firstPublishedRound;
+    teamCorrectTargets = result.teamCorrectTargets;
+    paperBatches.push(recalculatedBatch);
+  });
+
+  return {
+    ...state,
+    scores,
+    firstPublishedRound,
+    teamCorrectTargets,
+    paperBatches,
+  };
+}
