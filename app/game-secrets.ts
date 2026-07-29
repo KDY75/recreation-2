@@ -19,6 +19,24 @@ const ENCRYPTED_IDENTITIES = {
   mac: "yD9JkE4GRy5fXPyXvtkO28drvD6Jk062TRpRgBCfJVI=",
 } as const;
 
+const ENCRYPTED_BALANCED_IDENTITIES = {
+  version: 2,
+  iterations: 120000,
+  salt: "dqPCdPRt8imf4TGf5Lt9uw==",
+  iv: "5bTs0h2vIp3Jou9cOraIww==",
+  ciphertext:
+    "V+aslWAS307DWCv/ndUIFqFfYIrnR4opKvGY24aeVgcsCnyXNKFFObn4dXKPuoyirGvFuwXOFJkAkcGbbZmEvTGk7lLy63g3rOFeH0lorcmuSWOGwVFWI8z5Fby/OB224HM+3N2+QMhvmhWrJ/0bz38b7SL8yg45PKQCDV6QvJR88O7AFN2vAORjUaMhpdOiMGRE3uh9GC4agZfWrRbwf9G4RXeGUFaybJg6KlSi8p5vAV9Vnwmm4aCEdH06Xdu7DinGRhaBkLcBRr/RzgTDzU56FL1TIM7zcp/gEk1L5PeIHcOzdLqwFYNb7eUeI6he32G6cMpXKpnesUdpOuXOktFXVJPKmzs6yxVZu6xuSGCOe7c7H8EK2CQk1Sa2VNIisGcYPFXTrvo1nRfKrLt4XrTxQjYkZf0ti2UkeZ4qBpjRithE/S8h6GMRbn8IwRRM98rWhJb1gHIGor/GNpSRJsJ0msziym1qNuR+J3Yk6iKfOhAZlq6Ge0IXhMbRbdt4Tj8vgbKNZEzAbKR8N/0ebbKmTgP+09L6pGCgbAk92cC2QLw5YSlHxPA/DTc13M301vJ54VCYgLTMzGWyGs15ZprLKhHA1Go0tV+zzkSWLNAH4smLwi4E4mZBuiBmQPxOSEz3oelNykTQuwMyP23TmzDDXAW79JasH4awCk/AlRbCJVHnjAVgRa5WfSJ4i5cRjI5fhkF/hcdn8FK7KFLMrlVrvtOX4+vQ8Xf9UUsCZUqMFGmD/cZ62CGvb0vSJHB7j4w/zjYS/KtHSEBPgMdebMNz1oyiRLs7fsYsTF3Ub7/xifRkuZVeO3EyP9PHGW91tjyZxRFilYf/90GpW1jV13aTqvXyrj8izc7J6oYdoGA6LJmf51UUVUv86TPCE2eRvF0krzS7uiMoun0LUZLpadO+jzSjZBIR5ZZMKFw6sGfw1VrkrkTXBfpC4EZEHYp7SbgEvz0Ls5jFhjJGKQH3/gBd/JspAFRYnhU7bnpJLVK2zS7n3n9Ds7fBepaAzrQRmO4JzO0+AX7Wi2Vx9auJU5jnHGriuOGbxsu1IgRCZAXQU+uRCpu1KE6Fad/o3JEsRdvaYR7PCxqL5LnNAm1Bww42Ak2KRW1+YmI2fl0J3wJXIWNq9gUThAvhBlkgvlemUh1fsATSkOKEiNN0IGZ932VQvXzzD+SooIwOAC/gDVd52xbaHhG71FhdDTYvis3D8779njQlbSEGbY6IVQUms53rNZ+nf1JSmq9yHzddKGXR4GQ3wyQURmBKbiMKjE9tzGDR9zXiX/vV46KiGkRXhqtg5uIGueCw1zq+g5mFZadKWAoXXpzQFAhgIf21KxUsm1NOLtY8b60qaeXYWPKz/g==",
+  mac: "XORT8rxoOhEEOgYtu3CVN90RbJ6N3V+lEJWbXjF8p1E=",
+} as const;
+
+type EncryptedIdentityPayload = {
+  iterations: number;
+  salt: string;
+  iv: string;
+  ciphertext: string;
+  mac: string;
+};
+
 function isIdentityMap(value: unknown): value is IdentityMap {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<IdentityMap>;
@@ -40,17 +58,18 @@ function constantTimeEqual(left: string, right: string): boolean {
   return mismatch === 0;
 }
 
-export async function decryptIdentities(password: string): Promise<IdentityMap> {
+async function decryptIdentityPayload(
+  payload: EncryptedIdentityPayload,
+  password: string,
+): Promise<IdentityMap> {
   await Promise.resolve();
 
-  const salt = CryptoJS.enc.Base64.parse(ENCRYPTED_IDENTITIES.salt);
-  const iv = CryptoJS.enc.Base64.parse(ENCRYPTED_IDENTITIES.iv);
-  const ciphertext = CryptoJS.enc.Base64.parse(
-    ENCRYPTED_IDENTITIES.ciphertext,
-  );
+  const salt = CryptoJS.enc.Base64.parse(payload.salt);
+  const iv = CryptoJS.enc.Base64.parse(payload.iv);
+  const ciphertext = CryptoJS.enc.Base64.parse(payload.ciphertext);
   const key = CryptoJS.PBKDF2(password, salt, {
     keySize: 256 / 32,
-    iterations: ENCRYPTED_IDENTITIES.iterations,
+    iterations: payload.iterations,
     hasher: CryptoJS.algo.SHA256,
   });
   const actualMac = CryptoJS.HmacSHA256(
@@ -58,7 +77,7 @@ export async function decryptIdentities(password: string): Promise<IdentityMap> 
     key,
   ).toString(CryptoJS.enc.Base64);
 
-  if (!constantTimeEqual(actualMac, ENCRYPTED_IDENTITIES.mac)) {
+  if (!constantTimeEqual(actualMac, payload.mac)) {
     throw new Error("Invalid password");
   }
 
@@ -74,4 +93,14 @@ export async function decryptIdentities(password: string): Promise<IdentityMap> 
   const parsed = JSON.parse(plaintext) as unknown;
   if (!isIdentityMap(parsed)) throw new Error("Invalid identity payload");
   return parsed;
+}
+
+export function decryptIdentities(password: string): Promise<IdentityMap> {
+  return decryptIdentityPayload(ENCRYPTED_IDENTITIES, password);
+}
+
+export function decryptBalancedIdentities(
+  password: string,
+): Promise<IdentityMap> {
+  return decryptIdentityPayload(ENCRYPTED_BALANCED_IDENTITIES, password);
 }

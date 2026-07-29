@@ -26,7 +26,10 @@ import {
   scorePaperBatch,
   type PaperGuess,
 } from "./game-logic";
-import { decryptIdentities } from "./game-secrets";
+import {
+  decryptBalancedIdentities,
+  decryptIdentities,
+} from "./game-secrets";
 
 type SectionId =
   | "setup"
@@ -292,6 +295,7 @@ export default function Home() {
   const [unlockStatus, setUnlockStatus] = useState<UnlockStatus>("locked");
   const [accessPassword, setAccessPassword] = useState("");
   const [unlockError, setUnlockError] = useState("");
+  const [applyingIdentityPreset, setApplyingIdentityPreset] = useState(false);
 
   const [collisionEvent, setCollisionEvent] = useState<1 | 2>(1);
   const [collisionSelection, setCollisionSelection] = useState<
@@ -451,6 +455,42 @@ export default function Home() {
     }));
     setEditingIdentities(false);
     setSection("collision");
+  }
+
+  async function applyBalancedIdentityPreset() {
+    if (game.started || applyingIdentityPreset) return;
+    if (
+      !window.confirm(
+        "현재 배정표를 추천 균형 배치로 바꿀까요? 시작 정보 카드도 S-3, K-3, P-3으로 맞춰집니다.",
+      )
+    ) {
+      return;
+    }
+
+    const password = window.sessionStorage.getItem(AUTH_SESSION_KEY);
+    if (!password) {
+      window.alert("추천 배정표를 불러오려면 사이트를 다시 열어 주세요.");
+      return;
+    }
+
+    setApplyingIdentityPreset(true);
+    try {
+      const identities = await decryptBalancedIdentities(password);
+      setGame((current) => ({
+        ...current,
+        identities: structuredClone(identities),
+        startSelections: {
+          S: "S-3",
+          K: "K-3",
+          P: "P-3",
+        },
+      }));
+      setEditingIdentities(false);
+    } catch {
+      window.alert("추천 배정표를 불러오지 못했습니다. 다시 시도해 주세요.");
+    } finally {
+      setApplyingIdentityPreset(false);
+    }
   }
 
   function resetGame() {
@@ -1111,12 +1151,23 @@ export default function Home() {
                     <h3>운영자용 전체 배정표</h3>
                   </div>
                   {!game.started && (
-                    <button
-                      className="secondary-button"
-                      onClick={() => setEditingIdentities((value) => !value)}
-                    >
-                      {editingIdentities ? "편집 완료" : "배정표 편집"}
-                    </button>
+                    <div className="identity-actions">
+                      <button
+                        className="secondary-button preset-button"
+                        disabled={applyingIdentityPreset}
+                        onClick={() => void applyBalancedIdentityPreset()}
+                      >
+                        {applyingIdentityPreset
+                          ? "추천 배치 적용 중..."
+                          : "추천 배정표 적용"}
+                      </button>
+                      <button
+                        className="secondary-button"
+                        onClick={() => setEditingIdentities((value) => !value)}
+                      >
+                        {editingIdentities ? "편집 완료" : "배정표 편집"}
+                      </button>
+                    </div>
                   )}
                 </div>
                 <div className="identity-table-wrap">

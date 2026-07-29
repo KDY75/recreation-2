@@ -745,6 +745,23 @@ select {
   box-shadow: none;
 }
 
+.identity-panel .panel-title {
+  align-items: flex-start;
+}
+
+.identity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.preset-button {
+  border-color: rgba(99, 244, 197, 0.42);
+  background: rgba(99, 244, 197, 0.09);
+  color: var(--mint);
+}
+
 .identity-table-wrap {
   margin-top: 16px;
   overflow-x: auto;
@@ -2193,6 +2210,19 @@ select {
 
   .panel {
     padding: 16px;
+  }
+
+  .identity-panel .panel-title {
+    flex-direction: column;
+  }
+
+  .identity-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .identity-actions .secondary-button {
+    flex: 1;
   }
 
   .start-select {
