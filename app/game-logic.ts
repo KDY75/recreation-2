@@ -1,6 +1,7 @@
 import {
   PARTICLES,
   QUANTUM_STATES,
+  TEAM_IDS,
   type CollisionLog,
   type GameState,
   type ParticipantId,
@@ -15,6 +16,48 @@ export type PaperGuess = {
   particle: Particle;
   state: QuantumState;
 };
+
+export type TeamStanding = {
+  team: TeamId;
+  score: number;
+  finalCorrect: number;
+  firstPublications: number;
+  successfulPapers: number;
+  correctionLaws: number;
+};
+
+export function compareTeamStandings(
+  first: TeamStanding,
+  second: TeamStanding,
+) {
+  return (
+    second.score - first.score ||
+    second.finalCorrect - first.finalCorrect ||
+    second.firstPublications - first.firstPublications ||
+    second.successfulPapers - first.successfulPapers ||
+    second.correctionLaws - first.correctionLaws
+  );
+}
+
+export function buildTeamStandings(state: GameState): TeamStanding[] {
+  return TEAM_IDS.map((team) => {
+    const paperEntries = state.paperBatches
+      .filter((batch) => batch.team === team)
+      .flatMap((batch) => batch.entries);
+    return {
+      team,
+      score: state.scores[team],
+      finalCorrect:
+        state.finalSubmissions.find((submission) => submission.team === team)
+          ?.rawCorrect ?? 0,
+      firstPublications: paperEntries.filter(
+        (entry) => entry.reason === "최초 발표",
+      ).length,
+      successfulPapers: paperEntries.filter((entry) => entry.correct).length,
+      correctionLaws: state.correctionProgress[team],
+    };
+  }).sort(compareTeamStandings);
+}
 
 export function calculateCollision(
   state: GameState,

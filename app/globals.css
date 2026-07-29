@@ -1784,33 +1784,83 @@ select {
   font-size: 28px;
 }
 
-.winner-panel > div {
-  display: flex;
-  justify-content: center;
-  gap: 9px;
+.tiebreak-order {
+  margin: -8px 0 18px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
 }
 
-.winner-panel p {
-  display: flex;
-  min-width: 120px;
-  align-items: center;
-  justify-content: space-between;
-  margin: 0;
-  padding: 11px 13px;
+.winner-standings-wrap {
+  overflow-x: auto;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: rgba(3, 10, 17, 0.38);
 }
 
-.winner-panel p span {
-  color: var(--muted);
-  font-size: 10px;
+.winner-standings {
+  width: 100%;
+  min-width: 650px;
+  border-collapse: collapse;
 }
 
-.winner-panel p strong {
+.winner-standings caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.winner-standings th,
+.winner-standings td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+
+.winner-standings th {
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.winner-standings td {
   color: var(--mint);
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  font-size: 20px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.winner-standings tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.winner-standings tr.is-winner td {
+  background: rgba(99, 244, 197, 0.065);
+}
+
+.winner-team-cell {
+  min-width: 110px;
+  text-align: left !important;
+}
+
+.winner-team-cell strong {
+  display: block;
+  color: var(--text);
+  font-family:
+    "Pretendard Variable", Pretendard, "Noto Sans KR", sans-serif;
+  font-size: 12px;
+}
+
+.winner-team-cell small {
+  color: var(--mint);
+  font-size: 7px;
+  letter-spacing: 0.14em;
 }
 
 .card-total {
@@ -2395,9 +2445,12 @@ select {
     border-left: 0;
   }
 
-  .winner-panel > div {
-    align-items: stretch;
-    flex-direction: column;
+  .winner-panel {
+    padding: 22px 14px;
+  }
+
+  .winner-panel h3 {
+    font-size: 23px;
   }
 
   .filter-bar {

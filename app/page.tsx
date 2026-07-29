@@ -21,8 +21,10 @@ import {
   type TeamId,
 } from "./game-data";
 import {
+  buildTeamStandings,
   calculateCollision,
   collisionResultText,
+  compareTeamStandings,
   rebuildPaperScoring,
   scorePaperBatch,
   type PaperGuess,
@@ -435,6 +437,14 @@ export default function Home() {
   const totalScore = Object.values(game.scores).reduce(
     (sum, score) => sum + score,
     0,
+  );
+  const rankedTeamStandings = useMemo(
+    () => buildTeamStandings(game),
+    [game],
+  );
+  const winningTeamStandings = rankedTeamStandings.filter(
+    (standing) =>
+      compareTeamStandings(standing, rankedTeamStandings[0]) === 0,
   );
 
   async function unlockGame(password: string) {
@@ -2424,7 +2434,8 @@ export default function Home() {
                   <h2>최종 지도 제출</h2>
                   <p>
                     제출 팀이 작성한 24명 전원의 입자와 상태를 옮겨 입력하세요.
-                    완전 일치 1명당 +1점, 최대 18점입니다.
+                    완전 일치 1명당 +1점, 최대 18점입니다. 총점 동점 시 최종
+                    지도·최초 발표·논문 정답·보정법칙 순으로 판정합니다.
                   </p>
                 </div>
                 <div className="team-tabs">
@@ -2580,22 +2591,58 @@ export default function Home() {
 
               {game.finalSubmissions.length === 3 && (
                 <article className="winner-panel">
-                  <span className="winner-kicker">FINAL RESULT</span>
+                  <span className="winner-kicker">
+                    FINAL RESULT · TIEBREAK
+                  </span>
                   <h3>
-                    {TEAM_SHORT_NAMES[
-                      TEAM_IDS.reduce((winner, team) =>
-                        game.scores[team] > game.scores[winner] ? team : winner,
-                      )
-                    ]}{" "}
-                    최고 점수
+                    {winningTeamStandings
+                      .map((standing) => TEAM_SHORT_NAMES[standing.team])
+                      .join(" · ")}{" "}
+                    {winningTeamStandings.length > 1 ? "공동 우승" : "우승"}
                   </h3>
-                  <div>
-                    {TEAM_IDS.map((team) => (
-                      <p key={team}>
-                        <span>{TEAM_SHORT_NAMES[team]}</span>
-                        <strong>{game.scores[team]}</strong>
-                      </p>
-                    ))}
+                  <p className="tiebreak-order">
+                    총점 → 최종 지도 정답 → 최초 발표 → 논문 정답 → 보정법칙
+                    순으로 판정
+                  </p>
+                  <div className="winner-standings-wrap">
+                    <table className="winner-standings">
+                      <caption>최종 순위 판정표</caption>
+                      <thead>
+                        <tr>
+                          <th>팀</th>
+                          <th>총점</th>
+                          <th>최종 지도</th>
+                          <th>최초 발표</th>
+                          <th>논문 정답</th>
+                          <th>보정법칙</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rankedTeamStandings.map((standing) => {
+                          const isWinner = winningTeamStandings.some(
+                            (winner) => winner.team === standing.team,
+                          );
+                          return (
+                            <tr
+                              className={isWinner ? "is-winner" : ""}
+                              key={standing.team}
+                            >
+                              <td className="winner-team-cell">
+                                <strong>
+                                  {TEAM_SHORT_NAMES[standing.team]}
+                                </strong>
+                                {isWinner && <small>WINNER</small>}
+                              </td>
+                              <td>{standing.score}</td>
+                              <td>{standing.finalCorrect}/24</td>
+                              <td>{standing.firstPublications}</td>
+                              <td>{standing.successfulPapers}</td>
+                              <td>{standing.correctionLaws}/4</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </article>
               )}
