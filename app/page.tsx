@@ -2434,8 +2434,9 @@ export default function Home() {
                   <h2>최종 지도 제출</h2>
                   <p>
                     제출 팀이 작성한 24명 전원의 입자와 상태를 옮겨 입력하세요.
-                    완전 일치 1명당 +1점, 최대 18점입니다. 총점 동점 시 최종
-                    지도·최초 발표·논문 정답·보정법칙 순으로 판정합니다.
+                    완전 일치 1명당 +1점, 최대 18점입니다. 총점 동점 시 동점
+                    상대 공개 수·자기팀 노출 수·최종 지도 정답 수·최초 발표
+                    수의 순서로 판정합니다.
                   </p>
                 </div>
                 <div className="team-tabs">
@@ -2601,8 +2602,9 @@ export default function Home() {
                     {winningTeamStandings.length > 1 ? "공동 우승" : "우승"}
                   </h3>
                   <p className="tiebreak-order">
-                    총점 → 최종 지도 정답 → 최초 발표 → 논문 정답 → 보정법칙
-                    순으로 판정
+                    총점 → 동점 팀끼리 상대를 맞힌 수(많을수록 우선) → 다른
+                    팀에게 자기팀이 맞혀진 수(적을수록 우선) → 최종 지도 정답
+                    수 → 최초 발표 수
                   </p>
                   <div className="winner-standings-wrap">
                     <table className="winner-standings">
@@ -2611,10 +2613,10 @@ export default function Home() {
                         <tr>
                           <th>팀</th>
                           <th>총점</th>
+                          <th>동점 상대 공개 ↑</th>
+                          <th>자기팀 노출 ↓</th>
                           <th>최종 지도</th>
                           <th>최초 발표</th>
-                          <th>논문 정답</th>
-                          <th>보정법칙</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2634,10 +2636,14 @@ export default function Home() {
                                 {isWinner && <small>WINNER</small>}
                               </td>
                               <td>{standing.score}</td>
+                              <td>
+                                {standing.scoreTieSize > 1
+                                  ? standing.headToHeadReveals
+                                  : "—"}
+                              </td>
+                              <td>{standing.ownTeamExposure}</td>
                               <td>{standing.finalCorrect}/24</td>
                               <td>{standing.firstPublications}</td>
-                              <td>{standing.successfulPapers}</td>
-                              <td>{standing.correctionLaws}/4</td>
                             </tr>
                           );
                         })}

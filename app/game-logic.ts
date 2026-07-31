@@ -20,10 +20,11 @@ export type PaperGuess = {
 export type TeamStanding = {
   team: TeamId;
   score: number;
+  scoreTieSize: number;
+  headToHeadReveals: number;
+  ownTeamExposure: number;
   finalCorrect: number;
   firstPublications: number;
-  successfulPapers: number;
-  correctionLaws: number;
 };
 
 export function compareTeamStandings(
@@ -32,15 +33,15 @@ export function compareTeamStandings(
 ) {
   return (
     second.score - first.score ||
+    second.headToHeadReveals - first.headToHeadReveals ||
+    first.ownTeamExposure - second.ownTeamExposure ||
     second.finalCorrect - first.finalCorrect ||
-    second.firstPublications - first.firstPublications ||
-    second.successfulPapers - first.successfulPapers ||
-    second.correctionLaws - first.correctionLaws
+    second.firstPublications - first.firstPublications
   );
 }
 
 export function buildTeamStandings(state: GameState): TeamStanding[] {
-  return TEAM_IDS.map((team) => {
+  const baseStandings = TEAM_IDS.map((team) => {
     const paperEntries = state.paperBatches
       .filter((batch) => batch.team === team)
       .flatMap((batch) => batch.entries);
@@ -53,10 +54,46 @@ export function buildTeamStandings(state: GameState): TeamStanding[] {
       firstPublications: paperEntries.filter(
         (entry) => entry.reason === "최초 발표",
       ).length,
-      successfulPapers: paperEntries.filter((entry) => entry.correct).length,
-      correctionLaws: state.correctionProgress[team],
     };
-  }).sort(compareTeamStandings);
+  });
+
+  return baseStandings
+    .map((standing) => {
+      const tiedTeams = new Set(
+        baseStandings
+          .filter((candidate) => candidate.score === standing.score)
+          .map((candidate) => candidate.team),
+      );
+      const ownSubmission = state.finalSubmissions.find(
+        (submission) => submission.team === standing.team,
+      );
+      const headToHeadReveals =
+        ownSubmission?.correctIds.filter((participant) => {
+          const targetTeam = participantTeam(participant);
+          return (
+            targetTeam !== standing.team &&
+            tiedTeams.has(targetTeam)
+          );
+        }).length ?? 0;
+      const ownTeamExposure = state.finalSubmissions
+        .filter((submission) => submission.team !== standing.team)
+        .reduce(
+          (total, submission) =>
+            total +
+            submission.correctIds.filter(
+              (participant) => participantTeam(participant) === standing.team,
+            ).length,
+          0,
+        );
+
+      return {
+        ...standing,
+        scoreTieSize: tiedTeams.size,
+        headToHeadReveals,
+        ownTeamExposure,
+      };
+    })
+    .sort(compareTeamStandings);
 }
 
 export function calculateCollision(
