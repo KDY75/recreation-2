@@ -233,6 +233,18 @@ function normalizeLoadedGameState(
       ...defaults.correctionProgress,
       ...(rawState.correctionProgress ?? {}),
     },
+    correctionSubmissions: Object.fromEntries(
+      TEAM_IDS.map((team) => [
+        team,
+        Array.from({ length: 4 }, (_, roundIndex) => {
+          const stored = rawState.correctionSubmissions?.[team]?.[roundIndex];
+          const parsed = Number(stored);
+          return Number.isFinite(parsed)
+            ? Math.min(2, Math.max(0, Math.floor(parsed)))
+            : 0;
+        }) as [number, number, number, number],
+      ]),
+    ) as GameState["correctionSubmissions"],
     trades: Array.isArray(rawState.trades) ? rawState.trades : [],
     firstPublishedRound: rawState.firstPublishedRound ?? {},
     teamCorrectTargets: {
@@ -280,6 +292,11 @@ function normalizeLoadedGameState(
     collisions: [],
     observations: [],
     correctionProgress: { S: 0, K: 0, P: 0 },
+    correctionSubmissions: {
+      S: [0, 0, 0, 0],
+      K: [0, 0, 0, 0],
+      P: [0, 0, 0, 0],
+    },
     trades: [],
     firstPublishedRound: {},
     teamCorrectTargets: { S: [], K: [], P: [] },
@@ -833,6 +850,32 @@ export default function Home() {
         [team]: lawNumber,
       },
     }));
+  }
+
+  function toggleCorrectionSubmission(
+    team: TeamId,
+    roundIndex: number,
+    attempt: 1 | 2,
+  ) {
+    setGame((current) => {
+      const teamCounts = current.correctionSubmissions?.[team] ?? [0, 0, 0, 0];
+      const currentCount = teamCounts[roundIndex] ?? 0;
+
+      // 1회 → 2회 순서로만 표시하고, 마지막 표시부터 되돌릴 수 있다.
+      if (currentCount < attempt - 1 || currentCount > attempt) return current;
+
+      const nextCount = currentCount === attempt ? attempt - 1 : attempt;
+      const nextTeamCounts = [...teamCounts] as [number, number, number, number];
+      nextTeamCounts[roundIndex] = nextCount;
+
+      return {
+        ...current,
+        correctionSubmissions: {
+          ...current.correctionSubmissions,
+          [team]: nextTeamCounts,
+        },
+      };
+    });
   }
 
   function eligibleTradeCards(team: TeamId) {
@@ -2007,7 +2050,8 @@ export default function Home() {
                   <h2>보정문제 카드 발급</h2>
                   <p>
                     팀이 문제를 맞힐 때마다 다음 보정법칙 카드를 즉시
-                    발급합니다. 순서는 1→4로 고정됩니다.
+                    발급합니다. 순서는 1→4로 고정되며, 각 팀은 라운드마다
+                    최대 2회까지 정답을 제출할 수 있습니다.
                   </p>
                 </div>
               </div>
@@ -2015,6 +2059,8 @@ export default function Home() {
                 {TEAM_IDS.map((team) => {
                   const progress = game.correctionProgress[team];
                   const nextLaw = CORRECTION_LAWS[progress];
+                  const submissionCounts =
+                    game.correctionSubmissions?.[team] ?? [0, 0, 0, 0];
                   return (
                     <article
                       className={`panel correction-panel team-${team.toLowerCase()}`}
@@ -2036,6 +2082,60 @@ export default function Home() {
                             {index + 1}
                           </i>
                         ))}
+                      </div>
+                      <div className="correction-submit-tracker">
+                        <div className="correction-submit-heading">
+                          <span>라운드별 정답 제출</span>
+                          <strong>팀당 2회</strong>
+                        </div>
+                        <div className="correction-round-grid">
+                          {submissionCounts.map((count, roundIndex) => {
+                            const round = roundIndex + 1;
+                            return (
+                              <div
+                                className={`correction-round${
+                                  game.round === round ? " is-current" : ""
+                                }${count === 2 ? " is-complete" : ""}`}
+                                key={round}
+                              >
+                                <div className="correction-round-label">
+                                  <span>{round}R</span>
+                                  <small>{count}/2</small>
+                                </div>
+                                <div className="correction-attempts">
+                                  {([1, 2] as const).map((attempt) => {
+                                    const unavailable =
+                                      count < attempt - 1 || count > attempt;
+                                    return (
+                                      <button
+                                        type="button"
+                                        className={
+                                          attempt <= count ? "is-used" : ""
+                                        }
+                                        onClick={() =>
+                                          toggleCorrectionSubmission(
+                                            team,
+                                            roundIndex,
+                                            attempt,
+                                          )
+                                        }
+                                        disabled={unavailable}
+                                        aria-label={`${TEAM_SHORT_NAMES[team]} ${round}라운드 ${attempt}번째 제출 ${
+                                          attempt <= count ? "취소" : "표시"
+                                        }`}
+                                        aria-pressed={attempt <= count}
+                                        key={attempt}
+                                      >
+                                        {attempt <= count ? "✓" : attempt}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p>정답·오답과 관계없이 제출될 때마다 순서대로 표시</p>
                       </div>
                       {nextLaw ? (
                         <>
