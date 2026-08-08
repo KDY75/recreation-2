@@ -936,6 +936,10 @@ export default function Home() {
     attempt: 1 | 2,
   ) {
     setGame((current) => {
+      // 보정문제 제출 표시는 현재 진행 중인 라운드에서만 수정한다.
+      // 지난/미래 라운드가 UI 밖의 호출로 바뀌는 것도 함께 막는다.
+      if (roundIndex !== current.round - 1) return current;
+
       const teamCounts = current.correctionSubmissions?.[team] ?? [0, 0, 0, 0];
       const currentCount = teamCounts[roundIndex] ?? 0;
 
@@ -2190,8 +2194,12 @@ export default function Home() {
                                 </div>
                                 <div className="correction-attempts">
                                   {([1, 2] as const).map((attempt) => {
+                                    const isCurrentRound =
+                                      game.round === round;
                                     const unavailable =
-                                      count < attempt - 1 || count > attempt;
+                                      !isCurrentRound ||
+                                      count < attempt - 1 ||
+                                      count > attempt;
                                     return (
                                       <button
                                         type="button"
@@ -2206,8 +2214,17 @@ export default function Home() {
                                           )
                                         }
                                         disabled={unavailable}
+                                        title={
+                                          isCurrentRound
+                                            ? undefined
+                                            : `현재 ${game.round}라운드에서만 수정할 수 있습니다.`
+                                        }
                                         aria-label={`${TEAM_SHORT_NAMES[team]} ${round}라운드 ${attempt}번째 제출 ${
-                                          attempt <= count ? "취소" : "표시"
+                                          !isCurrentRound
+                                            ? "수정 불가"
+                                            : attempt <= count
+                                              ? "취소"
+                                              : "표시"
                                         }`}
                                         aria-pressed={attempt <= count}
                                         key={attempt}
@@ -2244,12 +2261,14 @@ export default function Home() {
                       )}
                       {progress > 0 && (
                         <div className="correction-undo-row">
-                          <span>
-                            최근 발급
-                            {latestCorrectionCard
-                              ? ` · #${String(latestCorrectionCard.id).padStart(3, "0")}`
-                              : ""}
-                          </span>
+                          <div className="correction-issued-card">
+                            <span>최근 발급 카드</span>
+                            <strong>
+                              {latestCorrectionCard
+                                ? `#${String(latestCorrectionCard.id).padStart(3, "0")}`
+                                : "—"}
+                            </strong>
+                          </div>
                           <button
                             type="button"
                             className="undo-button correction-undo-button"
