@@ -2091,6 +2091,10 @@ export default function Home() {
                       {(currentObservationRun.cardIds ?? []).map((cardId) => {
                         const card = game.cards.find((item) => item.id === cardId);
                         if (!card) return null;
+                        const [observationTarget, ...observationResultParts] =
+                          card.body.split(" · ");
+                        const observationResult =
+                          observationResultParts.join(" · ");
                         return (
                           <div className="data-card compact-card" key={card.id}>
                             <div>
@@ -2099,7 +2103,10 @@ export default function Home() {
                               </span>
                               <CardTag card={card} />
                             </div>
-                            <strong>{card.body}</strong>
+                            <div className="observation-card-content">
+                              <span>{observationTarget}</span>
+                              <strong>{observationResult}</strong>
+                            </div>
                           </div>
                         );
                       })}
