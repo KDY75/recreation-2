@@ -1330,6 +1330,10 @@ select {
   background: color-mix(in srgb, var(--team-color) 8%, transparent);
 }
 
+.correction-round:not(.is-current) {
+  opacity: 0.52;
+}
+
 .correction-round-label {
   margin: 0 2px 6px;
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
@@ -1417,11 +1421,27 @@ select {
   border-top: 1px solid var(--line);
 }
 
-.correction-undo-row > span {
+.correction-issued-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.correction-issued-card > span {
   color: var(--muted);
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 9px;
   font-weight: 800;
+}
+
+.correction-issued-card > strong {
+  color: var(--team-color);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 21px;
+  font-weight: 950;
+  letter-spacing: 0.03em;
+  line-height: 1;
 }
 
 .correction-undo-row > small {
