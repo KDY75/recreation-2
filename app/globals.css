@@ -1215,19 +1215,48 @@ select {
 }
 
 .compact-card {
-  min-height: 100px;
+  min-height: 126px;
+  padding: 18px;
 }
 
 .compact-card > div {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 11px;
+  margin-bottom: 14px;
 }
 
-.compact-card > strong {
-  font-size: 12px;
-  line-height: 1.55;
+.generated-card-grid .card-number {
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+.generated-card-grid .card-tag {
+  padding: 5px 8px;
+  font-size: 9px;
+}
+
+.compact-card > .observation-card-content {
+  display: grid;
+  align-items: start;
+  gap: 7px;
+  margin: 0;
+}
+
+.observation-card-content > span {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 780;
+  line-height: 1.35;
+}
+
+.observation-card-content > strong {
+  color: var(--mint);
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.4;
 }
 
 .card-tag {
